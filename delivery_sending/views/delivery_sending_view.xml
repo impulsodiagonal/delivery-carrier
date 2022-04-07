@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2020 Impulso Diagonal - Javier Colmeiro
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl). -->
+<odoo>
+    <record id="view_delivery_carrier_form" model="ir.ui.view">
+        <field name="model">delivery.carrier</field>
+        <field name="inherit_id" ref="delivery.view_delivery_carrier_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//notebook/page[1]" position='before'>
+                <page
+                    string="Sending Configuration"
+                    attrs="{'invisible': [('delivery_type', '!=', 'sending')]}"
+                >
+                    <group>
+                        <group string="Connection">
+                            <field
+                                name="sending_access_key"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field name="sending_group_id" />
+                            <field name="sending_user" />
+                        </group>
+                        <group string="Label">
+                            <field
+                                name="sending_barcode_format"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field name="sending_barcode_mail" />
+                            <field
+                                name="sending_barcode_a4_start_pos"
+                                attrs="{'required': [('sending_barcode_format', '=', 'A4')], 'invisible': [('sending_barcode_format', '!=', 'A4')]}"
+                            />
+                            <field
+                                name="sending_barcode_a4_separated"
+                                attrs="{'required': [('sending_barcode_format', '=', 'A4')], 'invisible': [('sending_barcode_format', '!=', 'A4')]}"
+                            />
+                        </group>
+                        <group string="Service">
+                            <field
+                                name="sending_booking_type"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field
+                                name="sending_incoterm_id"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field
+                                name="sending_service_type"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field
+                                name="sending_service_land"
+                                attrs="{'required': [('delivery_type', '=', 'sending'), ('sending_booking_type', '=', 'land')], 'invisible': [('sending_booking_type', '!=', 'land')]}"
+                            />
+                            <field name="sending_indoor_delivery" />
+                            <field name="sending_express" />
+                            <field name="sending_food_related" />
+                            <field name="sending_heated_transport" />
+                            <field name="sending_home_delivery" />
+                            <field name="sending_own_pickup" />
+                            <field name="sending_pharmaceuticals" />
+                        </group>
+                        <group string="Logistics">
+                            <field
+                                name="sending_default_packaging_id"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                            <field
+                                name="sending_measure_unit"
+                                attrs="{'required': [('delivery_type', '=', 'sending')]}"
+                            />
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
