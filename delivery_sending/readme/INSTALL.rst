@@ -1,4 +1,4 @@
-This module depends on the `zeep` python library and the OCA/delivery-carrier
+This module depends on the `suds` python library and the OCA/delivery-carrier
 `delivery_package_number` and `delivery_state` modules.
 
 The Sending API doesn't provide delivery rating methods, so OCA's

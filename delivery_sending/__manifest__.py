@@ -11,10 +11,9 @@
     "application": False,
     "installable": True,
     "depends": ["delivery_package_number", "delivery_state"],
-    "external_dependencies": {"python": ["zeep"]},
+    "external_dependencies": {"python": ["suds"]},
     "data": [
         "views/delivery_sending_view.xml",
         "views/stock_picking_views.xml",
-        "data/delivery_sending_data.xml",
     ],
 }

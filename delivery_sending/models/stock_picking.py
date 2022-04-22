@@ -1,4 +1,3 @@
-# Copyright 2021 Studio73 - Ethan Hildick <ethan@studio73.es>
 # Copyright 2022 Impulso Diagonal - Javier Colmeiro
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
@@ -14,7 +13,7 @@ class StockPicking(models.Model):
         if self.delivery_type != "sending" or not tracking_ref:
             return
         label = self.carrier_id.sending_get_label(tracking_ref)
-        label_name = "sending_label_{}.pdf".format(tracking_ref)
+        label_name = "sending_label_{}.zpl".format(tracking_ref)
         self.message_post(
             body=(_("Sending label for %s") % tracking_ref),
             attachments=[(label_name, label)],

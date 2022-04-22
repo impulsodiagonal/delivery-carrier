@@ -36,7 +36,7 @@ APIs with Odoo delivery system.
 Installation
 ============
 
-This module depends on the `zeep` python library and the OCA/delivery-carrier
+This module depends on the `suds` python library and the OCA/delivery-carrier
 `delivery_package_number` and `delivery_state` modules.
 
 The Sending API doesn't provide delivery rating methods, so OCA's
@@ -50,11 +50,7 @@ To configure a Sending delivery method:
 #. Go to *Inventory > Configuration > Delivery > Shipping methods* and create a new one.
 #. Choose *Sending* as provider.
 #. Configure the service parameters according to your contract considerations.
-#. Choose a delivery product and a default packaging. This is mandatory for the booking
-   request as it needs the packaging code.
-
-To make tests, set the carrier environment to test from the smart button. Don't forget
-to set it to production once you're ready to use the delivery method!
+#. Choose a delivery product.
 
 Usage
 =====
@@ -65,11 +61,7 @@ Place shipping bookings
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 #. When the picking is validated, the shipping will be booked at Sending.
-#. With the response, we'll receive the delivery tracking number and the pdf label in a
-   chatter message and it will be kept as attachment to the document.
-#. You can manage packages number either with the proper Odoo workflows or with the
-   package number field available in the *Additional Info* tab. You'll get as many
-   labels as declared packages.
+#. With the response, we'll receive the delivery tracking number.
 
 Cancel bookings
 ~~~~~~~~~~~~~~~
@@ -85,47 +77,10 @@ Get labels
 #. If by chance we delete the generated labels, we can obtain them again hitting the
    *Sending Label* buttons in the header of the picking form.
 
-Tracking
-~~~~~~~~
-
-#. The module is integrated with `delivery_state` to be able to get the tracking info
-   directly from the  Sending API.
-#. To do so, go to a picking shipped with Sending. In the *Additional Info* tab you'll
-   find an action button to *Update tracking state* so the state will be updated from
-   the Sending API.
-
-Debugging
-~~~~~~~~~
-
-The API calls and responses are tracked in two special fields in the picking that can
-be viewed by technical users. You can also log them in as `ir.logging` records setting
-the carrier debug on from the smart button.
-
 Known issues / Roadmap
 ======================
 
 * There's no dummy access key to test API calls so no tests can be performed.
-* The test booking and shipping APIs databases aren't connected so it isn't possible to
-  perform trackings on test mode.
-* Only land shipping is implemented, although the module is prepared for extend to
-  air and ocean just considering the mandatory request fields for those methods.
-  Some additional adaptations could be needed (e.g.: origin and destination airport,
-  port) anyway.
-* Only volume is supported as a measure unit and with the limitations of Odoo itself. To
-  enjoy a full fledged volume support, install and configure the OCA’s
-  `stock_quant_package_dimension` module and its dependencies. The connector is ready to
-  make use of their volume computations.
-* It’d be needed to extend the method to support Sending measure units such as  loading
-  pieces or pallet space.
-* Some more booking features aren’t yet supported although can be extended in the
-  future. Some of those, although the complete list would be really extensive:
-
-  * Dangerous goods.
-  * Driver pre-advise.
-  * Transport temperature.
-  * Customs clearance.
-  * Cargo insurance.
-  * Cash on delivery.
 
 Bug Tracker
 ===========

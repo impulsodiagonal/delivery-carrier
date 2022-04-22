@@ -1,202 +1,167 @@
-# Copyright 2022 Impulso Diagonal - Javier Colmeiro
-# Copyright 2021 Tecnativa - David Vidal
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
-
+import binascii
 import logging
-from xml.etree import ElementTree as ET
-
-from zeep import Client, Settings
-from zeep.exceptions import Fault
-from zeep.plugins import HistoryPlugin
+import os
 
 from odoo import _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError
+
 
 _logger = logging.getLogger(__name__)
 
-SENDING_API_URL = {
-    "test": "http://webservices.sending.alerce.es",
-    "prod": "http://webservices.sending.alerce.es",
-}
-SENDING_API_SERVICE = {
-    "booking_req": "/WS_clientes/entrada_expedicionesRequest?wsdl",
-    "booking_res": "/WS_clientes/entrada_expedicionesResponse?wsdl",
-    "label_req": "/WS_clientes/etiquetarExpedicionZPLRequest?wsdl",
-    "label_res": "/WS_clientes/etiquetarExpedicionZPLResponse?wsdl",
-    "pdf_req": "/WS_clientes/etiquetarExpedicionPDFRequest?wsdl",
-    "pdf_res": "/WS_clientes/etiquetarExpedicionPDFResponse?wsdl",
-    "cancel_req": "/WS_clientes/cancelarExpedicionRequest?wsdl",
-    "cancel_res": "/WS_clientes/cancelarExpedicionResponse?wsdl",
-    "tracking": "/WS_clientes/incidencias_expedicion?wsdl",
-}
+try:
+    from suds.client import Client
+    from suds.sax.text import Raw
+    from suds.sudsobject import asdict
+    from suds.plugin import MessagePlugin
+except (ImportError, IOError) as err:
+    _logger.debug(err)
 
+class LogPlugin(MessagePlugin):
+    def sending(self, context):
+        print(str(context.envelope))
+    def received(self, context):
+        print(str(context.reply))
 
 class SendingRequest:
     """Interface between Sending SOAP API and Odoo recordset
        Abstract Sending API Operations to connect them with Odoo
-
-       Not all the features are implemented, but could be easily extended with
-       the provided API. We leave the operations empty for future.
     """
 
-    def __init__(
-        self, access_key=None, group_id=None, user=None, prod=False, service="booking"
-    ):
-        self.access_key = access_key or ""
-        self.group_id = group_id or ""
-        self.user = user or ""
-        self.service = service
-        api_env = "prod" if prod else "test"
-        self.history = HistoryPlugin(maxlen=10)
-        settings = Settings(strict=False, xml_huge_tree=True)
-        self.client = Client(
-            wsdl=SEDNGING_API_URL[api_env] + SENDING_API_SERVICE[service],
-            settings=settings,
-            plugins=[self.history],
+    def __init__(self, uidcustomer=None, uidpass=None):
+        """As the wsdl isn't public, we have to load it from local"""
+        print('ENTRO INIT SENDING')
+        wsdl_url = "http://padua.sending.es/sending/ws_clientes?wsdl"
+        self.uidcustomer = uidcustomer or ""
+        self.uidpass = uidpass or ""
+        self.client = Client(wsdl_url, plugins=[LogPlugin()])
+
+    def _prepare_send_shipping_docin(self, **kwargs):
+        """Sending is not very standard. Prepare parameters to pass them raw in
+           the SOAP message as fichero requires a raw xml string to function"""
+        return """<![CDATA[<?xml version="1.0" encoding="ISO-8859-1"?>
+            <Expediciones>
+              <Expedicion>
+                <Fecha>{date}</Fecha>
+                <ClienteRemitente>{uidcustomer}</ClienteRemitente>
+                <NombreRemitente>{uidcustomername}</NombreRemitente>
+                <DireccionRemitente>{uidcustomeraddress}</DireccionRemitente>
+                <PaisRemitente>{uidcustomercountry}</PaisRemitente>
+                <CodigoPostalRemitente>{uidcustomerzip}</CodigoPostalRemitente>
+                <PoblacionRemitente>{uidcustomercity}</PoblacionRemitente>
+                <NombreDestinatario>{clientname}</NombreDestinatario>
+                <DireccionDestinatario>{clientaddress}</DireccionDestinatario>
+                <PaisDestinatario>{clientcountry}</PaisDestinatario>
+                <CodigoPostalDestinatario>{clientzip}</CodigoPostalDestinatario>
+                <PoblacionDestinatario>{clientcity}</PoblacionDestinatario>
+                <PersonaContactoDestinatario>{clientcontact}</PersonaContactoDestinatario>
+                <TelefonoContactoDestinatario>{clientphone}</TelefonoContactoDestinatario>
+                <EnviarMail>N</EnviarMail>
+                <MailDestinatario></MailDestinatario>
+                <ProductoServicio>01</ProductoServicio>
+                <Observaciones1>{note}</Observaciones1>
+                <Kilos>{weight}</Kilos>
+                <Volumen>0.00</Volumen>
+                <ReferenciaCliente>{ref}</ReferenciaCliente>
+                <TipoPortes>P</TipoPortes>
+                <EntregaSabado>N</EntregaSabado>
+                <Retorno>N</Retorno>
+                <Bultos>{number_of_packages}</Bultos>
+              </Expedicion>
+            </Expediciones>]]>""".format(
+            **kwargs
         )
 
-    def _process_reply(self, service, vals=None, send_as_kw=False):
-        """Sending API returns error petitions as server exceptions wich makes zeep to
-        raise a Fault exception as well. To catch the error info we need to make a
-        raw_response request and the extract the error codes from the response."""
-        try:
-            if not send_as_kw:
-                response = service(vals)
-            else:
-                response = service(**vals)
-        except Fault as e:
-            with self.client.settings(raw_response=True):
-                if not send_as_kw:
-                    response = service(vals)
-                else:
-                    response = service(**vals)
-                try:
-                    root = ET.fromstring(response.text)
-                    error_text = next(root.iter("faultstring")).text
-                    error_message = next(root.iter("message")).text
-                    error_code = next(root.iter("code")).text
-                    raise ValidationError(
-                        _(
-                            "Error in the request to the Sending API. This is the "
-                            "thrown message:\n\n"
-                            "[%s]\n"
-                            "%s - %s" % (error_text, error_code, error_message)
-                        )
-                    )
-                except ValidationError:
-                    raise
-                # If we can't get the proper exception, fallback to the first
-                # exception error traceback
-                except Exception:
-                    raise Fault(e)
-        return response
-
-    # Booking API methods
-
-    def _shipping_type_method(self, method):
-        """Map shipping method with API method. Note that currently only land
-        is supported. Default to land to ensure a method is provided.
-        :params string with shipping method
-        :returns string with the mapped key value for the proper method
-        """
-        method_map = {
-            "land": "getBookingRequestLand",
-            "air": "getBookingRequestAir",
-            "ocean_fcl": "getBookingRequestOceanFCL",
-            "ocean_lcl": "getBookingRequestOceanLCL",
-        }
-        return method_map.get("method", "getBookingRequestLand")
-
-    def _shipping_api_credentials(self):
-        """Each API has a different credentials SOAP declaration"""
-        credentials = {"applicationArea": {"accessKey": self.access_key}}
-        if self.user:
-            credentials["applicationArea"]["userId"] = self.user
-        if self.group_id:
-            credentials["applicationArea"]["groupId"] = self.group_id
-        return credentials
-
-    def _sending_shipping_api_wrapper(self, method=False):
-        """Aside from a different API method, each one has its own wrapper"""
-        booking_wrapper_map = {
-            "land": "bookingLand",
-            "air": "bookingAir",
-            "ocean_fcl": "bookingOceanFCL",
-            "ocean_lcl": "bookingOceanLCL",
-        }
-        return booking_wrapper_map.get(method, "land")
-
-    def _send_shipping(self, picking_vals, method=False):
+    def _send_shipping(self, vals):
         """Create new shipment
-        :params vals dict of needed values
-        :returns dict with Sending response containing the shipping code and label
         """
-        vals = self._shipping_api_credentials()
-        method_wrapper = self._scheneker_shipping_api_wrapper(method)
-        vals[method_wrapper] = picking_vals
-        # From the Sending docs:
-        # Defines if booking shall be submitted. If false, the booking can be edited
-        # in the frontend and MUST be submitted manually.
-        vals[method_wrapper].update({"submitBooking": True})
-        response = self._process_reply(
-            self.client.service[self._shipping_type_method(method)], vals
-        )
-        return {
-            "booking_id": response.bookingId,
-            "barcode": response.barcodeDocument,
-        }
+        print('ENTRO _SEND_SHIPPING')
+        vals.update({
+            "uidcustomer": self.uidcustomer,
+            "uidpass": self.uidpass
+        })
+        fichero = Raw(self._prepare_send_shipping_docin(**vals))
+        _logger.debug(fichero)
+        print(fichero)
+        try:
+            res = self.client.service.entrada_expediciones(
+                cliente=self.uidcustomer,
+                formato="xml",
+                param1=self.uidpass,
+                fichero=fichero)
+        except Exception as e:
+            raise UserError(
+                _(
+                    "No response from server recording Sending delivery {}.\n"
+                    "Traceback:\n{}"
+                ).format(vals.get("ref", ""), e)
+            )
+        
+        if res[:2] != 'OK' and res[:2] != 'TE':
+            raise UserError(
+                _(
+                    "Sending returned an error trying to record the shipping for {}.\n"
+                    "Error:\n{}"
+                ).format(
+                    vals.get("ref", ""), res
+                )
+            )
+        #todo get label
+        print(res)
+        return res
 
-    def _shipping_label(self, reference_list=None, label_format="A6"):
-        """Get shipping label for the given ref
-        :param list reference -- shipping reference list
+    def _shipping_label_zpl(self, reference):
+        """Get shipping label ZPL for the given ref
+        :param reference -- shipping reference
         :returns: base64 with pdf labels
         """
-        reference_list = reference_list or []
-        vals = dict(
-            **self._shipping_api_credentials(),
-            **{"barcodeRequest": {"format": label_format}}
-        )
-        vals["barcodeRequest"].update({"bookingId": ref for ref in reference_list})
-        label = self._process_reply(
-            self.client.service.getBookingBarcodeRequest, vals
-        ).document
-        return label
+        try:
+            res = self.client.service.etiquetarExpedicionZPL(
+                cliente=self.uidcustomer,
+                expedicion=reference)
+        except Exception as e:
+            raise UserError(
+                _(
+                    "No response from server recording Sending delivery {}.\n"
+                    "Traceback:\n{}"
+                ).format(vals.get("ref", ""), e)
+            )
+        return res
+
+    def _shipping_label_pdf(self, reference):
+        """Get shipping label PDF for the given ref
+        :param reference -- shipping reference
+        :returns: base64 with pdf labels
+        """
+        try:
+            res = self.client.service.etiquetarExpedicionPDF(
+                cliente=self.uidcustomer,
+                expedicion=reference,
+                usuario=self.uidcustomer,
+                param1=self.uidpass)
+        except Exception as e:
+            raise UserError(
+                _(
+                    "No response from server recording Sending delivery {}.\n"
+                    "Traceback:\n{}"
+                ).format(vals.get("ref", ""), e)
+            )
+        return res
 
     def _cancel_shipment(self, reference=False):
-        """Cancel de expedition for the given ref
-        :param str reference -- booking reference string
-        :returns: bool True if success
+        """Cancel shipment for a given reference
         """
-        vals = self._shipping_api_credentials()
-        vals.update({"cancelRequest": {"bookingId": reference}})
-        response = self._process_reply(
-            self.client.service.getBookingCancelRequest, vals
-        )
-        # TODO: Inspect typical response as we don't want to return a zeep  object.
-        # Anyway, it's going to fail if the booking can't be cancelled. So either we
-        # receive an exception error or the booking is cancelled.
-        return bool(response)
-
-    # Tracking API methods
-
-    def _tracking_api_credentials(self):
-        """Each API has a different credentials SOAP declaration"""
-        return {"AccessKey": self.access_key, "in": {}}
-
-    def _get_tracking_states(
-        self, reference=False, reference_type="cu", booking_type="land"
-    ):
-        if not reference:
+        try:
+            response = self.client.service.cancelarExpedicion(
+                cliente=self.uidcustomer,
+                param1=self.uidpass,
+                expedicion=reference)
+            _logger.debug(response)
+        except Exception as e:
+            _logger.error(
+                "No response from server canceling Sending ref {}.\n"
+                "Traceback:\n{}".format(reference, e)
+            )
             return {}
-        vals = self._tracking_api_credentials()
-        vals["in"].update(
-            {
-                "referenceNumber": reference,
-                "referenceType": reference_type,
-                "transportNature": "exp" if booking_type == "land" else "int",
-            }
-        )
-        response = self._process_reply(
-            self.client.service.getPublicShipmentDetails, vals, send_as_kw=True
-        )
-        return {"shipment": response.Shipment}
+        print(response)
+        return response
