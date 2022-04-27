@@ -1,11 +1,13 @@
 # Copyright 2022 Impulso Diagonal - Javier Colmeiro
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
-import hashlib
-
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
 from .sending_request import SendingRequest
+from .sending_master_data import (
+    SENDING_SERVICES,
+    SENDING_COUNTRY_CODES,
+)
 
 
 class DeliveryCarrier(models.Model):
@@ -14,6 +16,12 @@ class DeliveryCarrier(models.Model):
     delivery_type = fields.Selection(selection_add=[("sending", "Sending")])
     sending_access_key = fields.Char(string="Access Key", help="sending Access Key")
     sending_user = fields.Char(string="User")
+    sending_service = fields.Selection(
+        selection=SENDING_SERVICES,
+        string="Sending Service",
+        help="Set the contracted Sending Service",
+        default="01",
+    )
 
     def _prepare_sending_shipping(self, picking):
         """Convert picking values for asm api
@@ -28,16 +36,18 @@ class DeliveryCarrier(models.Model):
         )
         consignee = picking.partner_id
         consignee_entity = picking.partner_id.commercial_partner_id
+        if consignee.country_id.code not in SENDING_COUNTRY_CODES.keys():
+            raise UserError(_("Delivery country not implemented with this carrier!"))
         return {
             "date": fields.Date.today().strftime("%d/%m/%Y"),
             "uidcustomername": sender_partner.name,
             "uidcustomeraddress": sender_partner.street,
-            "uidcustomercountry": "034",
+            "uidcustomercountry": SENDING_COUNTRY_CODES[sender_partner.country_id.code],
             "uidcustomerzip": sender_partner.zip,
             "uidcustomercity": sender_partner.city,
             "clientname": consignee.name,
             "clientaddress": consignee.street,
-            "clientcountry": "034",
+            "clientcountry": SENDING_COUNTRY_CODES[consignee.country_id.code],
             "clientzip": consignee.zip,
             "clientcity": consignee.city,
             "clientcontact": consignee.name,
@@ -45,7 +55,8 @@ class DeliveryCarrier(models.Model):
             "note": picking.origin,
             "weight": int(picking.weight),
             "ref": picking.name,
-            "number_of_packages": picking.number_of_packages
+            "number_of_packages": picking.number_of_packages,
+            "service": self.sending_service
         }
 
     def sending_send_shipping(self, pickings):

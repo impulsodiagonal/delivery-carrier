@@ -58,7 +58,7 @@ class SendingRequest:
                 <TelefonoContactoDestinatario>{clientphone}</TelefonoContactoDestinatario>
                 <EnviarMail>N</EnviarMail>
                 <MailDestinatario></MailDestinatario>
-                <ProductoServicio>01</ProductoServicio>
+                <ProductoServicio>{service}</ProductoServicio>
                 <Observaciones1>{note}</Observaciones1>
                 <Kilos>{weight}</Kilos>
                 <Volumen>0.00</Volumen>

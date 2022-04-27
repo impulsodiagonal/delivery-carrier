@@ -18,6 +18,7 @@
                                 attrs="{'required': [('delivery_type', '=', 'sending')]}"
                             />
                             <field name="sending_user" />
+                            <field name="sending_service"/>
                         </group>
                     </group>
                 </page>
